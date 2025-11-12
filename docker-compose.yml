@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./uploads:/app/uploads
+      - ./chroma_db:/app/chroma_db
+      - ${GOOGLE_APPLICATION_CREDENTIALS}:/app/service-account.json
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build: .
+    volumes:
+      - ./app:/app/app
+      - ./uploads:/app/uploads
+      - ./chroma_db:/app/chroma_db
+      - ${GOOGLE_APPLICATION_CREDENTIALS}:/app/service-account.json
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    command: celery -A worker.celery_app worker --loglevel=info --concurrency=4
+
+volumes:
+  redis_data:
